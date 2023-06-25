@@ -47,21 +47,22 @@ class InputManager {
   getIntent(world: WorldState): Intent | undefined {
     let intent: Intent | undefined = undefined;
     if (this.pos) {
+      const closestNode = world.closestNode(this.pos);
+      const distance = closestNode?.pos.distanceTo(this.pos);
       if (this.clicked_buttons === 1 && this.prev_clicked_buttons === 0) {
-        intent = {type: 'AddNode', pos: this.pos};
+        if (!distance || distance > 30) {
+
+          intent = {type: 'AddNode', pos: this.pos};
+        }
       } else if (
         this.clicked_buttons === 2 &&
         this.prev_clicked_buttons === 0
       ) {
-        const closestNode = worldState.closestNode(this.pos);
-        if (closestNode) {
-          const distance = closestNode.pos.distanceTo(this.pos);
-          if (distance < 10) {
+        if (closestNode && distance && distance < 10) {
             intent = {type: 'DeleteNode', node: closestNode};
           }
         }
       }
-    }
     this.prev_clicked_buttons = this.clicked_buttons;
     return intent;
   }
