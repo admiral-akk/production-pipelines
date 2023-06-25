@@ -5,13 +5,16 @@ const context = <CanvasRenderingContext2D>canvas.getContext('2d');
 context.fillStyle = '#ff0000';
 context.strokeStyle = '#ff0000';
 
-type None = {type: 'None'};
 type AddNode = {
   type: 'AddNode';
   pos: Position;
 };
+type DeleteNode = {
+  type: 'DeleteNode';
+  node: GameNode;
+};
 
-type Intent = None | AddNode;
+type Intent = AddNode | DeleteNode;
 
 class Position {
   x: number;
@@ -20,35 +23,44 @@ class Position {
     this.x = _x;
     this.y = _y;
   }
+
+  copy() {
+   return new Position(this.x, this.y);
+  }
+
+  distanceTo(other: Position): number {
+    return Math.sqrt(
+      Math.pow(other.x - this.x, 2) + Math.pow(other.y - this.y, 2)
+    );
+  }
 }
 
 class InputManager {
   pos?: Position;
-
-  startPo?: Node;
   prev_clicked_buttons: number;
   clicked_buttons: number;
   constructor() {
     this.prev_clicked_buttons = 0;
     this.clicked_buttons = 0;
   }
-  registerClick() {
-    this.prev_clicked_buttons = this.clicked_buttons;
-  }
 
-  getIntent(world: WorldState): Intent {
-    let intent: Intent;
-    if (mouseState.pos) {
-      if (
-        mouseState.clicked_buttons === 1 &&
-        mouseState.prev_clicked_buttons === 0
+  getIntent(world: WorldState): Intent | undefined {
+    let intent: Intent | undefined = undefined;
+    if (this.pos) {
+      if (this.clicked_buttons === 1 && this.prev_clicked_buttons === 0) {
+        intent = {type: 'AddNode', pos: this.pos};
+      } else if (
+        this.clicked_buttons === 2 &&
+        this.prev_clicked_buttons === 0
       ) {
-        intent = {type: 'AddNode', pos: mouseState.pos};
-      } else {
-        intent = {type: 'None'};
+        const closestNode = worldState.closestNode(this.pos);
+        if (closestNode) {
+          const distance = closestNode.pos.distanceTo(this.pos);
+          if (distance < 10) {
+            intent = {type: 'DeleteNode', node: closestNode};
+          }
+        }
       }
-    } else {
-      intent = {type: 'None'};
     }
     this.prev_clicked_buttons = this.clicked_buttons;
     return intent;
@@ -58,7 +70,7 @@ class InputManager {
 class GameNode {
   pos: Position;
   constructor(_pos: Position) {
-    this.pos = _pos;
+    this.pos = _pos.copy();
   }
 }
 
@@ -70,6 +82,34 @@ class WorldState {
 
   addNode(pos: Position) {
     this.nodes.push(new GameNode(pos));
+  }
+
+  deleteNode(node: GameNode) {
+    const index = this.nodes.findIndex(n => n === node);
+    if (index >= 0) {
+      this.nodes.splice(index, 1);
+    }
+  }
+
+  closestNode(pos: Position): GameNode | undefined {
+    if (!this.nodes.length) {
+      return undefined;
+    }
+    const closestIndex = this.nodes
+      .map(n => n.pos.distanceTo(pos))
+      .reduce((r, v, i, a) => (v > a[r] ? r : i), -1);
+    return this.nodes[closestIndex];
+  }
+
+  handleIntent(intent: Intent) {
+    switch (intent.type) {
+      case 'AddNode':
+        this.addNode(intent.pos);
+        break;
+      case 'DeleteNode':
+        this.deleteNode(intent.node);
+        break;
+    }
   }
 
   render(context: CanvasRenderingContext2D) {
@@ -142,12 +182,8 @@ function animate() {
   maybeResize(context, [window.innerWidth, window.innerHeight]);
 
   const intent = mouseState.getIntent(worldState);
-  switch (intent.type) {
-    case 'AddNode':
-      worldState.addNode(intent.pos);
-      break;
-    case 'None':
-      break;
+  if (intent) {
+    worldState.handleIntent(intent);
   }
   worldState.render(context);
 }
