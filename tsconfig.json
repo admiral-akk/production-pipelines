@@ -1,0 +1,25 @@
+{
+  "extends": "./node_modules/gts/tsconfig-google.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "outDir": "./dist/",
+    "noImplicitAny": true,
+    "module": "es6",
+    "target": "es5",
+    "moduleResolution": "node",
+    "lib": [
+      "es6",
+      "dom"
+    ],
+    "types": [
+        "node"
+    ]
+  },
+  "allowSyntheticDefaultImports" : true,
+   "esModuleInterop" : true,
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts"
+  ]
+}
