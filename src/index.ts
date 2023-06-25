@@ -5,6 +5,8 @@ const context = <CanvasRenderingContext2D>canvas.getContext('2d');
 context.fillStyle = '#ff0000';
 context.strokeStyle = '#ff0000';
 
+type NodeId = number;
+
 type AddNode = {
   type: 'AddNode';
   pos: Position;
@@ -16,10 +18,6 @@ type DeleteNode = {
 type StartDrag = {
   type: 'StartDrag';
   node: GameNode;
-};
-type ContinueDrag = {
-  type: 'ContinueDrag';
-  pos: Position;
 };
 type CancelDrag = {
   type: 'CancelDrag';
@@ -33,7 +31,6 @@ type Intent =
   | AddNode
   | DeleteNode
   | StartDrag
-  | ContinueDrag
   | CancelDrag
   | ConnectNode;
 
@@ -70,16 +67,39 @@ class InputManager {
     if (this.pos) {
       const closestNode = world.closestNode(this.pos);
       const distance = closestNode?.pos.distanceTo(this.pos);
-      if (this.clicked_buttons === 1 && this.prev_clicked_buttons === 0) {
-        if (!distance || distance > 30) {
-          intent = {type: 'AddNode', pos: this.pos};
+      const buttonChanged = this.clicked_buttons !== this.prev_clicked_buttons;
+      const isDragging = !!world.selectedNode;
+
+      if (isDragging) {
+        switch (this.clicked_buttons) {
+          case 0: 
+          if (closestNode && distance && distance < 10) {
+            intent = {type: 'ConnectNode', node: closestNode};
+          } else {
+            intent = {type:'CancelDrag'}
+          }
+          break;
+          case 3:
+          case 2:
+            intent = {type:'CancelDrag'}
+            break;
+          default:
+            break;
         }
-      } else if (
-        this.clicked_buttons === 2 &&
-        this.prev_clicked_buttons === 0
-      ) {
-        if (closestNode && distance && distance < 10) {
-          intent = {type: 'DeleteNode', node: closestNode};
+      } else if (buttonChanged) {
+        switch (this.clicked_buttons) {
+          case 1:
+            if (!distance || distance > 30) {
+              intent = {type: 'AddNode', pos: this.pos};
+            } else if (closestNode && distance && distance < 15) {
+              intent = {type: 'StartDrag', node: closestNode}
+            }
+            break;
+          case 2:
+            if (closestNode && distance && distance < 10) {
+              intent = {type: 'DeleteNode', node: closestNode};
+            }
+            break;
         }
       }
     }
@@ -89,18 +109,23 @@ class InputManager {
 }
 
 class GameNode {
+  id: NodeId;
   pos: Position;
-  connectedTo?: Node;
-  constructor(_pos: Position) {
+  connectedTo?: GameNode;
+  constructor(_id: NodeId, _pos: Position) {
+    this.id = _id;
     this.pos = _pos;
   }
 }
 
 class WorldState {
+  currentId: NodeId;
   nodes: GameNode[];
   selectedNode?: GameNode;
+  cursorPos?: Position;
   constructor() {
-    this.nodes = [new GameNode(new Position(500, 500))];
+    this.currentId = 0;
+    this.nodes = [];
   }
 
   closestNode(pos: Position): GameNode | undefined {
@@ -113,10 +138,15 @@ class WorldState {
     return this.nodes[closestIndex];
   }
 
+  updateCursor(cursor?: Position) {
+    this.cursorPos = cursor;
+  }
+
   handleIntent(intent: Intent) {
+    console.log(intent);
     switch (intent.type) {
       case 'AddNode':
-        this.nodes.push(new GameNode(intent.pos));
+        this.nodes.push(new GameNode(this.currentId++,intent.pos));
         break;
       case 'DeleteNode':
         const index = this.nodes.findIndex(n => n === intent.node);
@@ -125,12 +155,21 @@ class WorldState {
         }
         break;
       case 'StartDrag':
-        break;
-      case 'ContinueDrag':
+        this.selectedNode = intent.node;
         break;
       case 'CancelDrag':
+        this.selectedNode = undefined;
         break;
       case 'ConnectNode':
+        if (this.selectedNode && this.selectedNode !== intent.node) {
+          this.nodes.filter(node => node.connectedTo === intent.node 
+            || node.connectedTo === this.selectedNode).forEach(node => {
+            node.connectedTo = undefined
+          });
+          this.selectedNode.connectedTo = intent.node;
+          intent.node = this.selectedNode;
+        }
+        this.selectedNode = undefined;
         break;
     }
   }
@@ -138,6 +177,30 @@ class WorldState {
   render(context: CanvasRenderingContext2D) {
     context.clearRect(0, 0, context.canvas.width, context.canvas.height);
     context.save();
+    context.fillStyle = '#000000';
+    context.strokeStyle = '#efef00';
+    context.lineCap = 'round';
+    context.lineWidth = 5;
+    if (this.selectedNode && this.cursorPos) {
+      context.beginPath();
+      context.moveTo(this.selectedNode.pos.x, this.selectedNode.pos.y);
+      context.lineTo(this.cursorPos.x,this.cursorPos.y);
+      context.stroke();
+      context.closePath();
+    }
+
+    this.nodes.forEach(node => {
+      context.fillStyle = '#000000';
+      context.strokeStyle = '#ff0000';
+      if (node.connectedTo) {
+        context.beginPath();
+        context.moveTo(node.pos.x, node.pos.y);
+        context.lineTo(node.connectedTo.pos.x,node.connectedTo.pos.y);
+        context.stroke();
+        context.closePath();
+      }
+    })
+
     context.fillStyle = '#000000';
     context.strokeStyle = '#ff0000';
     this.nodes.forEach(node => {
@@ -205,6 +268,7 @@ function animate() {
   maybeResize(context, [window.innerWidth, window.innerHeight]);
 
   const intent = mouseState.getIntent(worldState);
+  worldState.updateCursor(mouseState.pos);
   if (intent) {
     worldState.handleIntent(intent);
   }
