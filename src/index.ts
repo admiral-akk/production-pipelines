@@ -13,8 +13,29 @@ type DeleteNode = {
   type: 'DeleteNode';
   node: GameNode;
 };
+type StartDrag = {
+  type: 'StartDrag';
+  node: GameNode;
+};
+type ContinueDrag = {
+  type: 'ContinueDrag';
+  pos: Position;
+};
+type CancelDrag = {
+  type: 'CancelDrag';
+};
+type ConnectNode = {
+  type: 'ConnectNode';
+  node: GameNode;
+};
 
-type Intent = AddNode | DeleteNode;
+type Intent =
+  | AddNode
+  | DeleteNode
+  | StartDrag
+  | ContinueDrag
+  | CancelDrag
+  | ConnectNode;
 
 class Position {
   x: number;
@@ -25,7 +46,7 @@ class Position {
   }
 
   copy() {
-   return new Position(this.x, this.y);
+    return new Position(this.x, this.y);
   }
 
   distanceTo(other: Position): number {
@@ -51,7 +72,6 @@ class InputManager {
       const distance = closestNode?.pos.distanceTo(this.pos);
       if (this.clicked_buttons === 1 && this.prev_clicked_buttons === 0) {
         if (!distance || distance > 30) {
-
           intent = {type: 'AddNode', pos: this.pos};
         }
       } else if (
@@ -59,10 +79,10 @@ class InputManager {
         this.prev_clicked_buttons === 0
       ) {
         if (closestNode && distance && distance < 10) {
-            intent = {type: 'DeleteNode', node: closestNode};
-          }
+          intent = {type: 'DeleteNode', node: closestNode};
         }
       }
+    }
     this.prev_clicked_buttons = this.clicked_buttons;
     return intent;
   }
@@ -70,26 +90,17 @@ class InputManager {
 
 class GameNode {
   pos: Position;
+  connectedTo?: Node;
   constructor(_pos: Position) {
-    this.pos = _pos.copy();
+    this.pos = _pos;
   }
 }
 
 class WorldState {
   nodes: GameNode[];
+  selectedNode?: GameNode;
   constructor() {
     this.nodes = [new GameNode(new Position(500, 500))];
-  }
-
-  addNode(pos: Position) {
-    this.nodes.push(new GameNode(pos));
-  }
-
-  deleteNode(node: GameNode) {
-    const index = this.nodes.findIndex(n => n === node);
-    if (index >= 0) {
-      this.nodes.splice(index, 1);
-    }
   }
 
   closestNode(pos: Position): GameNode | undefined {
@@ -105,10 +116,21 @@ class WorldState {
   handleIntent(intent: Intent) {
     switch (intent.type) {
       case 'AddNode':
-        this.addNode(intent.pos);
+        this.nodes.push(new GameNode(intent.pos));
         break;
       case 'DeleteNode':
-        this.deleteNode(intent.node);
+        const index = this.nodes.findIndex(n => n === intent.node);
+        if (index >= 0) {
+          this.nodes.splice(index, 1);
+        }
+        break;
+      case 'StartDrag':
+        break;
+      case 'ContinueDrag':
+        break;
+      case 'CancelDrag':
+        break;
+      case 'ConnectNode':
         break;
     }
   }
