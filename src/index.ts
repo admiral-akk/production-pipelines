@@ -7,24 +7,26 @@ context.strokeStyle = '#ff0000';
 
 type NodeId = number;
 
+const selectDist = 15;
+
 type AddNode = {
   type: 'AddNode';
   pos: Position;
 };
 type DeleteNode = {
   type: 'DeleteNode';
-  node: GameNode;
+  node: NodeId;
 };
 type StartDrag = {
   type: 'StartDrag';
-  node: GameNode;
+  node: NodeId;
 };
 type CancelDrag = {
   type: 'CancelDrag';
 };
 type ConnectNode = {
   type: 'ConnectNode';
-  node: GameNode;
+  node: NodeId;
 };
 
 type Intent =
@@ -73,8 +75,8 @@ class InputManager {
       if (isDragging) {
         switch (this.clicked_buttons) {
           case 0: 
-          if (closestNode && distance && distance < 10) {
-            intent = {type: 'ConnectNode', node: closestNode};
+          if (closestNode && distance && distance <= selectDist) {
+            intent = {type: 'ConnectNode', node: closestNode.id};
           } else {
             intent = {type:'CancelDrag'}
           }
@@ -91,13 +93,13 @@ class InputManager {
           case 1:
             if (!distance || distance > 30) {
               intent = {type: 'AddNode', pos: this.pos};
-            } else if (closestNode && distance && distance < 15) {
-              intent = {type: 'StartDrag', node: closestNode}
+            } else if (closestNode && distance && distance <= selectDist) {
+              intent = {type: 'StartDrag', node: closestNode.id}
             }
             break;
           case 2:
-            if (closestNode && distance && distance < 10) {
-              intent = {type: 'DeleteNode', node: closestNode};
+            if (closestNode && distance && distance <= selectDist) {
+              intent = {type: 'DeleteNode', node: closestNode.id};
             }
             break;
         }
@@ -111,20 +113,34 @@ class InputManager {
 class GameNode {
   id: NodeId;
   pos: Position;
-  connectedTo?: GameNode;
+  connectedTo?: NodeId;
   constructor(_id: NodeId, _pos: Position) {
     this.id = _id;
     this.pos = _pos;
+  }
+
+  render(selectedNode?: NodeId, cursor?: Position ) {
+    if (cursor && this.pos.distanceTo(cursor) <= selectDist || selectedNode === this.id) {
+      context.save();
+      context.fillStyle = '#ff0000';
+        context.beginPath();
+        context.arc(this.pos.x, this.pos.y, selectDist, 0, 2 * Math.PI);
+        context.fill();
+        context.restore();
+        }
+        context.beginPath();
+        context.arc(this.pos.x, this.pos.y, 10, 0, 2 * Math.PI);
+        context.fill();
   }
 }
 
 class WorldState {
   currentId: NodeId;
   nodes: GameNode[];
-  selectedNode?: GameNode;
+  selectedNode?: NodeId;
   cursorPos?: Position;
   constructor() {
-    this.currentId = 0;
+    this.currentId = 1;
     this.nodes = [];
   }
 
@@ -142,6 +158,10 @@ class WorldState {
     this.cursorPos = cursor;
   }
 
+  getNode(id: NodeId) {
+    return this.nodes.find(n => n.id === id);
+  }
+
   handleIntent(intent: Intent) {
     console.log(intent);
     switch (intent.type) {
@@ -149,10 +169,8 @@ class WorldState {
         this.nodes.push(new GameNode(this.currentId++,intent.pos));
         break;
       case 'DeleteNode':
-        const index = this.nodes.findIndex(n => n === intent.node);
-        if (index >= 0) {
-          this.nodes.splice(index, 1);
-        }
+        this.nodes = this.nodes.filter(n => n.id !== intent.node);
+        this.nodes.filter(n => n.connectedTo === intent.node).forEach(n => n.connectedTo = undefined);
         break;
       case 'StartDrag':
         this.selectedNode = intent.node;
@@ -162,12 +180,16 @@ class WorldState {
         break;
       case 'ConnectNode':
         if (this.selectedNode && this.selectedNode !== intent.node) {
-          this.nodes.filter(node => node.connectedTo === intent.node 
-            || node.connectedTo === this.selectedNode).forEach(node => {
-            node.connectedTo = undefined
-          });
-          this.selectedNode.connectedTo = intent.node;
-          intent.node = this.selectedNode;
+          const start = this.getNode(this.selectedNode);
+          const end = this.getNode(intent.node);
+          if (start && end) {
+            this.nodes.filter(node => node.connectedTo === start.id 
+              || node.connectedTo === end.id).forEach(node => {
+              node.connectedTo = undefined
+            });
+            start.connectedTo = end.id;
+            end.connectedTo = start.id;
+          }
         }
         this.selectedNode = undefined;
         break;
@@ -178,35 +200,38 @@ class WorldState {
     context.clearRect(0, 0, context.canvas.width, context.canvas.height);
     context.save();
     context.fillStyle = '#000000';
-    context.strokeStyle = '#efef00';
+    context.strokeStyle = '#ff0000';
     context.lineCap = 'round';
     context.lineWidth = 5;
     if (this.selectedNode && this.cursorPos) {
+      const selectedNode = this.getNode(this.selectedNode);
+      if (selectedNode){
       context.beginPath();
-      context.moveTo(this.selectedNode.pos.x, this.selectedNode.pos.y);
+      context.moveTo(selectedNode.pos.x, selectedNode.pos.y);
       context.lineTo(this.cursorPos.x,this.cursorPos.y);
       context.stroke();
       context.closePath();
     }
+    }
 
     this.nodes.forEach(node => {
+      if (node.connectedTo) {
       context.fillStyle = '#000000';
       context.strokeStyle = '#ff0000';
-      if (node.connectedTo) {
+        let end = this.getNode(node.connectedTo)
+        ;if (end){
         context.beginPath();
         context.moveTo(node.pos.x, node.pos.y);
-        context.lineTo(node.connectedTo.pos.x,node.connectedTo.pos.y);
+        context.lineTo(end.pos.x,end.pos.y);
         context.stroke();
-        context.closePath();
-      }
-    })
+        context.closePath();}
+      }}
+    );
 
     context.fillStyle = '#000000';
     context.strokeStyle = '#ff0000';
     this.nodes.forEach(node => {
-      context.beginPath();
-      context.arc(node.pos.x, node.pos.y, 10, 0, 2 * Math.PI);
-      context.fill();
+      node.render(this.selectedNode, this.cursorPos);
     });
     context.restore();
   }
@@ -261,6 +286,7 @@ function maybeResize(
   context.canvas.height = newSize[1];
   context.drawImage(temp_cnvs, 0, 0);
   context.restore();
+  context.translate(0.5, 0.5);
 }
 
 function animate() {
